@@ -78,7 +78,7 @@ def load_price_data(start_date: str, end_date: str) -> pd.DataFrame:
         df = conn.execute(
             """
             SELECT date, adj_close
-            FROM raw.prices
+            FROM pg.raw.prices
             WHERE ticker = 'SPY'
               AND date >= CAST(? AS DATE)
               AND date <= CAST(? AS DATE)
@@ -104,7 +104,7 @@ def load_regime_data(start_date: str, end_date: str) -> pd.DataFrame:
         df = conn.execute(
             """
             SELECT date, regime, shock_alarm, computed_at
-            FROM feature.regime_labels
+            FROM pg.feature.regime_labels
             WHERE date >= CAST(? AS DATE)
               AND date <= CAST(? AS DATE)
             ORDER BY date ASC
@@ -130,7 +130,7 @@ def load_regime_features(start_date: str, end_date: str) -> pd.DataFrame:
             """
             SELECT date, vix, vix3m, vix_term, hy_spread, ig_spread, term_spread,
                    rv20, rv60, ma200_gap
-            FROM feature.regime_features
+            FROM pg.feature.regime_features
             WHERE date >= CAST(? AS DATE)
               AND date <= CAST(? AS DATE)
             ORDER BY date ASC
@@ -156,7 +156,7 @@ def load_fred_data(series_ids: list, start_date: str, end_date: str) -> pd.DataF
         df = conn.execute(
             f"""
             SELECT series_id, date, value
-            FROM raw.fred_series
+            FROM pg.raw.fred_series
             WHERE series_id IN ({placeholders})
               AND date >= CAST(? AS DATE)
               AND date <= CAST(? AS DATE)
@@ -182,7 +182,7 @@ def load_data_status() -> dict:
     try:
         # raw.prices
         row = conn.execute(
-            "SELECT MAX(date), COUNT(*), COUNT(DISTINCT ticker) FROM raw.prices"
+            "SELECT MAX(date), COUNT(*), COUNT(DISTINCT ticker) FROM pg.raw.prices"
         ).fetchone()
         status["prices"] = {
             "latest_date": str(row[0]) if row[0] else "N/A",
@@ -192,7 +192,7 @@ def load_data_status() -> dict:
 
         # raw.fred_series
         row = conn.execute(
-            "SELECT MAX(date), COUNT(*), COUNT(DISTINCT series_id) FROM raw.fred_series"
+            "SELECT MAX(date), COUNT(*), COUNT(DISTINCT series_id) FROM pg.raw.fred_series"
         ).fetchone()
         status["fred"] = {
             "latest_date": str(row[0]) if row[0] else "N/A",
@@ -202,7 +202,7 @@ def load_data_status() -> dict:
 
         # raw.sec_financials
         row = conn.execute(
-            "SELECT MAX(filed_date), COUNT(*), COUNT(DISTINCT ticker) FROM raw.sec_financials"
+            "SELECT MAX(filed_date), COUNT(*), COUNT(DISTINCT ticker) FROM pg.raw.sec_financials"
         ).fetchone()
         status["sec"] = {
             "latest_date": str(row[0]) if row[0] else "N/A",
@@ -212,7 +212,7 @@ def load_data_status() -> dict:
 
         # feature.regime_labels
         row = conn.execute(
-            "SELECT MAX(date), COUNT(*) FROM feature.regime_labels"
+            "SELECT MAX(date), COUNT(*) FROM pg.feature.regime_labels"
         ).fetchone()
         status["regime_labels"] = {
             "latest_date": str(row[0]) if row[0] else "N/A",
@@ -221,7 +221,7 @@ def load_data_status() -> dict:
 
         # feature.regime_features
         row = conn.execute(
-            "SELECT MAX(date), COUNT(*) FROM feature.regime_features"
+            "SELECT MAX(date), COUNT(*) FROM pg.feature.regime_features"
         ).fetchone()
         status["regime_features"] = {
             "latest_date": str(row[0]) if row[0] else "N/A",
@@ -247,7 +247,7 @@ def load_latest_regime(as_of_date: str) -> dict:
         row = conn.execute(
             """
             SELECT date, regime, shock_alarm
-            FROM feature.regime_labels
+            FROM pg.feature.regime_labels
             WHERE date <= CAST(? AS DATE)
             ORDER BY date DESC
             LIMIT 1
@@ -693,7 +693,7 @@ def render_tab_portfolio(as_of_date: str) -> None:
             SELECT
                 date,
                 COALESCE(current_drift, 0) as drift_pct
-            FROM normalized.portfolio_state
+            FROM pg.normalized.portfolio_state
             WHERE date >= CURRENT_DATE - 30
             ORDER BY date ASC
             """,
@@ -743,7 +743,7 @@ def render_tab_portfolio(as_of_date: str) -> None:
                 rebalance_triggered,
                 rebalance_reason,
                 target_portfolio
-            FROM normalized.portfolio_state
+            FROM pg.normalized.portfolio_state
             WHERE date = ?
             ORDER BY date DESC
             LIMIT 1

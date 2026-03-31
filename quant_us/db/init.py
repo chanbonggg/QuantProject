@@ -15,10 +15,13 @@ from dotenv import load_dotenv
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from utils.logger import logger
 
-load_dotenv()
+try:
+    load_dotenv(dotenv_path=Path(__file__).parent.parent.parent / ".env", encoding="utf-8")
+except Exception as e:
+    logger.warning(f"[.env 로드] 인코딩 오류, 환경변수 기본값 사용: {e}")
 
 DB_PATH = os.getenv("DB_PATH", "./data/quant_us.duckdb")
-PG_DSN = os.getenv("PG_DSN", "postgresql://postgres:quant@localhost:5432/quant_us")
+PG_DSN = os.getenv("PG_DSN") or "postgresql://postgres:quant@localhost:5433/quant_us"
 
 
 def get_pg_connection() -> psycopg2.extensions.connection:

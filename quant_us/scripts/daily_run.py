@@ -259,7 +259,7 @@ def _step_collect_sec(date_str: str, conn, dry_run: bool) -> dict:
 
         for ticker in universe[:10]:  # 일일 파이프라인에서는 샘플만 수집 (전체 수집은 별도 배치)
             try:
-                rows = collect_financials(ticker, start_year=start_year, conn=conn)
+                rows = collect_financials(ticker, start_year=start_year, conn=None)
                 total_rows += rows
             except Exception as ticker_err:
                 logger.warning(f"[파이프라인] SEC 수집 개별 실패 ({ticker}): {ticker_err}")
@@ -284,8 +284,8 @@ def _step_collect_fred(date_str: str, conn, dry_run: bool) -> dict:
 
     logger.info(f"[파이프라인] [3/10] FRED 수집 시작: {date_str}")
     try:
-        # FRED는 마지막 수집일 이후만 증분 수집
-        rows = _retry_with_backoff(fred_collect_all, start=date_str, conn=conn, max_retries=3, base_delay=1.0)
+        # FRED는 마지막 수집일 이후만 증분 수집 (쓰기 작업이므로 PG conn 사용)
+        rows = _retry_with_backoff(fred_collect_all, start=date_str, conn=None, max_retries=3, base_delay=1.0)
         msg = f"{rows}행 저장"
         logger.info(f"[파이프라인] FRED 수집 완료: {msg}")
         return _make_step_result("FRED수집", "success", msg)

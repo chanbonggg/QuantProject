@@ -19,6 +19,7 @@ data/
 *.db
 *.sqlite
 *.pkl
+*.pyc
 
 # Logs and runtime outputs
 *.log

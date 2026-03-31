@@ -289,7 +289,7 @@ def _get_last_filed_date(ticker: str, conn: duckdb.DuckDBPyConnection) -> Option
 def collect_financials(
     ticker: str,
     start_year: int = 2010,
-    conn: Optional[duckdb.DuckDBPyConnection] = None,
+    conn: Optional[psycopg2.extensions.connection] = None,
 ) -> int:
     """
     지정된 ticker의 SEC 재무 데이터를 수집해 raw.sec_financials에 저장한다.
@@ -304,8 +304,8 @@ def collect_financials(
     """
     close_conn = conn is None
     if conn is None:
-        from db.init import get_connection
-        conn = get_connection()
+        from db.init import get_pg_connection
+        conn = get_pg_connection()
 
     ticker = ticker.upper()
     logger.info(f"[SEC 수집] {ticker} 시작: start_year={start_year}")
