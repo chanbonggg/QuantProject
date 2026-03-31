@@ -1,0 +1,39 @@
+﻿# Secrets
+.env
+.env.*
+*.key
+*.pem
+*.token
+
+# Claude-related (do not publish)
+.claude/
+CLAUDE.md
+
+# Data files (private/large)
+data/
+*.csv
+*.parquet
+*.feather
+*.h5
+*.hdf5
+*.db
+*.sqlite
+*.pkl
+
+# Logs and runtime outputs
+*.log
+wfa.log
+
+# Python caches and build artifacts
+__pycache__/
+.pytest_cache/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Editor/OS
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
