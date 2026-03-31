@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "skills": {
+    "postgresql-table-design": {
+      "source": "wshobson/agents",
+      "sourceType": "github",
+      "computedHash": "d7d040ee506a300c08a64b9ef6de9aa677b6d7251e33c3c87e0608f821a9506d"
+    }
+  }
+}

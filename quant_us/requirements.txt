@@ -1,0 +1,30 @@
+# Core
+python-dotenv==1.2.2
+loguru==0.7.3
+duckdb==1.5.0
+psycopg2-binary==2.9.9
+
+# Data
+pandas==2.3.3
+numpy==2.4.3
+
+# Data Sources
+yfinance==1.2.0
+polygon-api-client==1.16.3
+sec-edgar-downloader==5.1.0
+fredapi==0.5.2
+requests==2.32.5
+beautifulsoup4==4.14.3
+
+# Quant/ML
+statsmodels==0.14.6
+hmmlearn==0.3.3
+cvxpy==1.8.1
+scipy==1.17.1
+
+# Visualization
+streamlit==1.55.0
+plotly==6.6.0
+
+# Testing
+pytest==9.0.2
