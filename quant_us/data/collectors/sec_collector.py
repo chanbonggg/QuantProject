@@ -322,7 +322,10 @@ def collect_financials(
         logger.info(f"[SEC 수집] {ticker} CIK={cik}")
 
         # 2. 증분 수집: DB의 마지막 filed_date 확인 (DuckDB로 읽기)
-        last_filed = _get_last_filed_date(ticker, conn)
+        from db.init import get_connection
+        duck_conn = get_connection()
+        last_filed = _get_last_filed_date(ticker, duck_conn)
+        duck_conn.close()
         if last_filed:
             logger.info(f"[SEC 수집] {ticker}: 마지막 저장 filed_date={last_filed}")
 
