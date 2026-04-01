@@ -612,7 +612,7 @@ def render_tab_portfolio(as_of_date: str) -> None:
 
     # 섹션 0: 현재 포트폴리오 (신규)
     st.subheader("현재 포트폴리오 현황")
-    total_value = 50000  # daily_run.py와 동일하게 고정
+    total_value = 500  # $500 자본금
 
     # Drift 데이터 조회
     try:

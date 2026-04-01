@@ -469,7 +469,7 @@ def _step_build_portfolio(
     logger.info(f"[파이프라인] [8/10] 포트폴리오 산출 + Drift 계산: {date_str}")
     try:
         # 1. Drift 계산 및 리밸런싱 판단
-        portfolio_state = PortfolioState(total_value=50000, conn=conn)
+        portfolio_state = PortfolioState(total_value=500, conn=conn)
         max_drift, drift_details = portfolio_state.compute_drift(raw_portfolio, date_str)
 
         # 2. 리밸런싱 필요 여부 판단
