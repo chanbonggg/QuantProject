@@ -470,7 +470,18 @@ def _step_build_portfolio(
     try:
         # 1. Drift 계산 및 리밸런싱 판단
         portfolio_state = PortfolioState(total_value=500, conn=conn)
-        max_drift, drift_details = portfolio_state.compute_drift(raw_portfolio, date_str)
+
+        # 직전 포트폴리오 상태 확인
+        prev_state = portfolio_state._get_previous_portfolio_state(date_str)
+
+        if prev_state is None:
+            # 첫 번째 실행: drift = 0
+            max_drift = 0.0
+            drift_details = {}
+            logger.info("[Drift 계산] 첫 실행이므로 drift=0")
+        else:
+            # 이전 상태가 있으면 drift 계산
+            max_drift, drift_details = portfolio_state.compute_drift(raw_portfolio, date_str)
 
         # 2. 리밸런싱 필요 여부 판단
         should_rebalance = (
@@ -497,7 +508,7 @@ def _step_build_portfolio(
 
         # 4. 상태 저장
         portfolio_state.save_state(
-            date_str, final_portfolio, should_rebalance, reason
+            date_str, final_portfolio, should_rebalance, reason, max_drift=max_drift
         )
 
         # 5. 결과 로깅

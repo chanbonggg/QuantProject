@@ -677,17 +677,18 @@ def render_tab_portfolio(as_of_date: str) -> None:
     st.subheader("Drift 히스토리 (최근 30일)")
     try:
         conn = get_connection()
-        drift_history = pd.read_sql_query(
+        drift_result = conn.execute(
             """
             SELECT
                 date,
                 COALESCE(current_drift, 0) as drift_pct
             FROM pg.normalized.portfolio_state
-            WHERE date >= CURRENT_DATE - 30
+            WHERE date >= CURRENT_DATE - INTERVAL '30 days'
             ORDER BY date ASC
-            """,
-            conn,
-        )
+            """
+        ).fetchall()
+
+        drift_history = pd.DataFrame(drift_result, columns=["date", "drift_pct"]) if drift_result else pd.DataFrame()
 
         if not drift_history.empty:
             drift_history["date"] = pd.to_datetime(drift_history["date"])

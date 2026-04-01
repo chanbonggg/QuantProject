@@ -223,6 +223,7 @@ class PortfolioState:
         rebalance_triggered: bool,
         reason: str,
         cash_amount: Optional[float] = None,
+        max_drift: Optional[float] = None,
     ) -> None:
         """
         포트폴리오 상태를 PostgreSQL에 저장.
@@ -233,6 +234,7 @@ class PortfolioState:
             rebalance_triggered: 리밸런싱 트리거 여부
             reason: 트리거 이유 ('drift', 'regime_shift', 'monthly', 'manual')
             cash_amount: 현금 ($, 옵션)
+            max_drift: 최대 Drift 값 (0~1 범위, 옵션)
         """
         try:
             # 현재 보유 종목별 데이터 조회
@@ -269,13 +271,14 @@ class PortfolioState:
                 """
                 INSERT INTO normalized.portfolio_state
                 (date, total_value, cash_amount, equity_value, target_portfolio,
-                 rebalance_triggered, rebalance_reason)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                 current_drift, rebalance_triggered, rebalance_reason)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (date) DO UPDATE SET
                     total_value = EXCLUDED.total_value,
                     cash_amount = EXCLUDED.cash_amount,
                     equity_value = EXCLUDED.equity_value,
                     target_portfolio = EXCLUDED.target_portfolio,
+                    current_drift = EXCLUDED.current_drift,
                     rebalance_triggered = EXCLUDED.rebalance_triggered,
                     rebalance_reason = EXCLUDED.rebalance_reason
                 """,
@@ -285,6 +288,7 @@ class PortfolioState:
                     cash_amount,
                     equity_value,
                     target_portfolio_json,
+                    max_drift,
                     rebalance_triggered,
                     reason,
                 ],
