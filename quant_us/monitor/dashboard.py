@@ -616,10 +616,10 @@ def render_tab_portfolio(as_of_date: str) -> None:
     with col1:
         total_value = st.slider(
             "총 자본금 ($)",
-            min_value=10000,
-            max_value=500000,
-            value=50000,
-            step=1000,
+            min_value=0,
+            max_value=1000,
+            value=500,
+            step=10,
             format="$%d",
         )
     with col2:
