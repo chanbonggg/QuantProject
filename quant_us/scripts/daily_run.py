@@ -481,7 +481,7 @@ def _step_build_portfolio(
 
         # 3. 리밸런싱 시에만 최적화 + 리스크 오버레이
         if should_rebalance:
-            final_portfolio = optimize(raw_portfolio, conn=conn)
+            final_portfolio = optimize(raw_portfolio, conn=conn, top_n=10)
             final_portfolio = apply_risk_overlay(final_portfolio, date=date_str, conn=conn)
             reason = (
                 "drift"
@@ -583,7 +583,7 @@ def _step_slack_summary(date_str: str, steps: list, alerts: list, portfolio: Opt
 
     summary = (
         f"일일 파이프라인 완료 ({date_str})\n"
-        f"성공: {counts['success']}, 실패: {counts['failed']}, 스킵: {counts['skipped']}\n"
+        f"성공: {counts['success']}, 실패: {counts['error']}, 스킵: {counts['skipped']}\n"
         f"포트폴리오: {portfolio_summary}"
     )
 
@@ -591,7 +591,7 @@ def _step_slack_summary(date_str: str, steps: list, alerts: list, portfolio: Opt
     _send_slack_alert(summary, level=level)
 
     logger.info(f"[파이프라인] Slack 요약 발송: {counts}")
-    return _make_step_result("Slack알람", "success", f"success={counts['success']}, failed={counts['failed']}")
+    return _make_step_result("Slack알람", "success", f"success={counts['success']}, failed={counts['error']}")
 
 
 # ---------------------------------------------------------------------------
