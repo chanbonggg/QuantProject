@@ -612,18 +612,7 @@ def render_tab_portfolio(as_of_date: str) -> None:
 
     # 섹션 0: 현재 포트폴리오 (신규)
     st.subheader("현재 포트폴리오 현황")
-    col1, col2 = st.columns([2, 1])
-    with col1:
-        total_value = st.slider(
-            "총 자본금 ($)",
-            min_value=0,
-            max_value=1000,
-            value=500,
-            step=10,
-            format="$%d",
-        )
-    with col2:
-        st.metric("설정된 자본금", f"${total_value:,.0f}")
+    total_value = 50000  # daily_run.py와 동일하게 고정
 
     # Drift 데이터 조회
     try:
