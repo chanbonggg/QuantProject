@@ -184,6 +184,7 @@ def optimize(
     max_weight: float = MAX_WEIGHT_PER_STOCK,
     max_sector_weight: float = MAX_WEIGHT_PER_SECTOR,
     min_stocks: int = MIN_STOCKS,
+    top_n: Optional[int] = None,
 ) -> pd.DataFrame:
     """
     포트폴리오 제약 조건 적용.
@@ -193,6 +194,7 @@ def optimize(
     2. 섹터 최대 비중 적용 (섹터 정보 없으면 스킵)
     3. 최소 종목 수 미달 시 균등분배 종목 추가
     4. 최종 정규화 (합=1.0)
+    5. top_n이 지정되면 상위 N개만 선택 후 재정규화
 
     Args:
         portfolio: columns=[ticker, weight, strategy_source]
@@ -200,13 +202,14 @@ def optimize(
         max_weight: 종목 최대 비중 (기본 5%)
         max_sector_weight: 섹터 최대 비중 (기본 30%)
         min_stocks: 최소 종목 수 (기본 20)
+        top_n: 상위 N개만 선택 (None이면 모든 종목 사용)
 
     Returns:
         pd.DataFrame: columns=[ticker, weight, strategy_source]
     """
     logger.info(
         f"[포트폴리오 최적화] optimize 시작: 입력 {len(portfolio)}개 종목, "
-        f"max_weight={max_weight:.2%}, max_sector={max_sector_weight:.2%}, min_stocks={min_stocks}"
+        f"max_weight={max_weight:.2%}, max_sector={max_sector_weight:.2%}, min_stocks={min_stocks}, top_n={top_n}"
     )
 
     if portfolio.empty:
@@ -284,6 +287,22 @@ def optimize(
             combined = _normalize_weights(combined)
 
     combined = combined.sort_values("weight", ascending=False).reset_index(drop=True)
+
+    # top_n 필터링: 자본 제약 시 상위 N개만 선택 (균등 가중치)
+    if top_n is not None and len(combined) > top_n:
+        is_ro = combined["ticker"].isin(RISK_OFF_TICKERS)
+        risk_off_combined = combined[is_ro]
+        equity_combined = combined[~is_ro].head(top_n)
+
+        # 주식은 균등 가중치, risk_off는 나머지
+        equity_weight = (1.0 - risk_off_combined["weight"].sum()) / len(equity_combined)
+        equity_combined["weight"] = equity_weight
+
+        combined = pd.concat([equity_combined, risk_off_combined], ignore_index=True).reset_index(drop=True)
+        combined = combined.sort_values("weight", ascending=False).reset_index(drop=True)
+
+        n_equity = len(equity_combined)
+        logger.info(f"[포트폴리오 최적화] top_n 필터링: {n_equity}개 주식 균등배치 (각 {equity_weight:.2%}) + risk_off {risk_off_combined['weight'].sum():.2%}")
 
     logger.info(
         f"[포트폴리오 최적화] optimize 완료: {len(combined)}개 종목, "
