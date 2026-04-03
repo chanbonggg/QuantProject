@@ -206,6 +206,29 @@ def _make_step_result(name: str, status: str, detail: str) -> dict:
     return {"name": name, "status": status, "detail": detail}
 
 
+def _get_price_last_date() -> Optional[str]:
+    """raw.prices 전체에서 가장 최근 수집일 조회."""
+    pg_conn = None
+    try:
+        pg_conn = get_pg_connection()
+        cur = pg_conn.cursor()
+        cur.execute("SELECT MAX(date) FROM raw.prices")
+        result = cur.fetchone()
+        cur.close()
+        if result and result[0]:
+            return str(result[0])
+        return None
+    except Exception as e:
+        logger.warning(f"[파이프라인] 마지막 수집일 조회 실패: {e}")
+        return None
+    finally:
+        if pg_conn:
+            try:
+                pg_conn.close()
+            except Exception:
+                pass
+
+
 # ---------------------------------------------------------------------------
 # 파이프라인 각 단계
 # ---------------------------------------------------------------------------
@@ -609,35 +632,12 @@ def _step_slack_summary(date_str: str, steps: list, alerts: list, portfolio: Opt
 # 메인 파이프라인
 # ---------------------------------------------------------------------------
 
-def run_pipeline(
-    date: Optional[str] = None,
-    conn=None,
-    dry_run: bool = False,
-) -> dict:
-    """
-    일일 파이프라인 실행.
-
-    Args:
-        date: 기준일 (None이면 오늘)
-        conn: DuckDB 연결 (None이면 자동 생성)
-        dry_run: True이면 수집(1~3단계) 스킵, 분석(4~10단계)만 실행
-
-    Returns:
-        dict:
-            'date': str
-            'steps': [{'name': str, 'status': 'success'|'failed'|'skipped', 'detail': str}]
-            'alerts': [{'level': str, 'message': str}]
-            'portfolio': pd.DataFrame or None
-    """
-    # 기준일 설정
-    date_str = date or datetime.today().strftime("%Y-%m-%d")
-    logger.info(f"[파이프라인] 시작: {date_str} (dry_run={dry_run})")
+def _run_single_date(date_str: str, dry_run: bool = False) -> dict:
+    """단일 날짜에 대해 파이프라인 실행."""
+    logger.info(f"[파이프라인] 단일 날짜 실행: {date_str} (dry_run={dry_run})")
 
     # DB 연결
-    close_conn = conn is None
-    if conn is None:
-        conn = get_connection()
-
+    conn = get_connection()
     steps: list = []
     alerts: list = []
     final_portfolio: Optional[pd.DataFrame] = None
@@ -682,11 +682,11 @@ def run_pipeline(
         steps.append(slack_step)
 
     except Exception as e:
-        logger.error(f"[파이프라인] 예상치 못한 오류: {e}")
-        _send_slack_alert(f"파이프라인 비정상 종료: {e}", level="CRITICAL")
+        logger.error(f"[파이프라인] 예상치 못한 오류 ({date_str}): {e}")
+        _send_slack_alert(f"파이프라인 비정상 종료 ({date_str}): {e}", level="CRITICAL")
         steps.append(_make_step_result("비정상종료", "error", str(e)))
     finally:
-        if close_conn and conn is not None:
+        if conn is not None:
             try:
                 conn.close()
             except Exception:
@@ -708,13 +708,71 @@ def run_pipeline(
     }
 
 
+def run_pipeline(
+    date: Optional[str] = None,
+    conn=None,
+    dry_run: bool = False,
+) -> dict:
+    """
+    일일 파이프라인 실행 (누락된 날짜 자동 백필).
+
+    Args:
+        date: 기준일 (None이면 누락된 날짜를 DB에서 자동 감지)
+        conn: DuckDB 연결 (사용되지 않음, 하위호환성)
+        dry_run: True이면 수집(1~3단계) 스킵, 분석(4~10단계)만 실행
+
+    Returns:
+        dict:
+            '마지막 실행 날짜'의 파이프라인 결과
+            'date': str
+            'steps': [{'name': str, 'status': 'success'|'failed'|'skipped', 'detail': str}]
+            'alerts': [{'level': str, 'message': str}]
+            'portfolio': pd.DataFrame or None
+    """
+    today = datetime.today().strftime("%Y-%m-%d")
+
+    if date:
+        # 명시 지정 시 단일 실행 (기존 동작 유지)
+        logger.info(f"[파이프라인] 명시 날짜 지정: {date}")
+        dates = [date]
+    else:
+        # 자동 감지: last_date 다음 영업일 ~ 오늘
+        last = _get_price_last_date()
+        logger.info(f"[파이프라인] DB 마지막 수집일: {last}, 오늘: {today}")
+
+        if last and last < today:
+            # 누락된 영업일들 생성
+            bdays = pd.bdate_range(
+                start=pd.Timestamp(last) + pd.offsets.BDay(1),
+                end=today,
+            )
+            dates = [d.strftime("%Y-%m-%d") for d in bdays]
+            logger.info(f"[파이프라인] 누락된 영업일 {len(dates)}개 감지: {dates[0]} ~ {dates[-1]}")
+        else:
+            dates = [today]
+            logger.info(f"[파이프라인] 당일 또는 최신 상태: {dates}")
+
+    # 날짜 리스트를 순서대로 처리
+    all_results = []
+    for date_str in dates:
+        logger.info(f"[파이프라인] {'=' * 60}")
+        logger.info(f"[파이프라인] 배치 실행: {date_str} ({len(all_results)+1}/{len(dates)})")
+        logger.info(f"[파이프라인] {'=' * 60}")
+        result = _run_single_date(date_str, dry_run)
+        all_results.append(result)
+
+    # 마지막 실행 결과 반환 (모든 결과는 로그에 남음)
+    logger.info(f"[파이프라인] 전체 배치 완료: {len(dates)}개 날짜 처리됨")
+    return all_results[-1] if all_results else {"date": today, "steps": [], "alerts": [], "portfolio": None}
+
+
 # ---------------------------------------------------------------------------
 # CLI 진입점
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="일일 파이프라인 실행")
-    parser.add_argument("--date", type=str, default=None, help="기준일 (YYYY-MM-DD, 기본=오늘)")
+    parser = argparse.ArgumentParser(description="일일 파이프라인 실행 (누락 날짜 자동 백필)")
+    parser.add_argument("--date", type=str, default=None, help="기준일 (YYYY-MM-DD, 기본=자동 감지)")
     parser.add_argument("--dry-run", action="store_true", help="수집 없이 분석만 실행")
     args = parser.parse_args()
 
@@ -722,7 +780,7 @@ if __name__ == "__main__":
 
     # 결과 출력
     print(f"\n{'=' * 60}")
-    print(f"파이프라인 실행 결과: {result['date']}")
+    print(f"파이프라인 최종 결과: {result['date']}")
     print(f"{'=' * 60}")
     for step in result["steps"]:
         icon = {"success": "O", "error": "X", "skipped": "-"}.get(step["status"], "?")
@@ -733,6 +791,6 @@ if __name__ == "__main__":
         for alert in result["alerts"]:
             print(f"  [{alert['level']}] {alert['message']}")
 
-    if result["portfolio"] is not None:
+    if result["portfolio"] is not None and not result["portfolio"].empty:
         n = len(result["portfolio"][result["portfolio"]["weight"] > 0])
         print(f"\n최종 포트폴리오: {n}개 종목")
