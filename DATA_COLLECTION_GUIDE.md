@@ -27,7 +27,7 @@ DB_PATH=./data/quant_us.duckdb
 | 수집기 | 파일 | 소스 | API키 필요 | 수집 대상 |
 |--------|------|------|------------|-----------|
 | 주가 | `quant_us/data/collectors/price_collector.py` | yfinance (무료) | 없음 | S&P500 503개 종목 OHLCV |
-| FRED | `quant_us/data/collectors/fred_collector.py` | FRED API | FRED_API_KEY | 거시지표 13개 시리즈 |
+| FRED | `quant_us/data/collectors/fred_collector.py` | FRED API | FRED_API_KEY | 거시지표 12개 시리즈 |
 | SEC | `quant_us/data/collectors/sec_collector.py` | SEC EDGAR XBRL | 없음 | 재무제표 (10-K/10-Q) |
 
 ---
@@ -92,11 +92,11 @@ collect_daily(target_date: str, conn=None) -> bool
 ## 2. FRED 거시지표 수집 (fred_collector.py)
 
 ### 뭘 수집하나
-- 미국 거시경제 지표 13개 시리즈:
+- 미국 거시경제 지표 12개 시리즈:
   - **금리 5개**: DFF(기준금리), DGS3MO(3개월), DGS2(2년), DGS10(10년), DGS30(30년)
   - **크레딧 2개**: BAMLH0A0HYM2(하이일드 스프레드), BAMLC0A0CM(투자등급 스프레드)
   - **경기 3개**: UNRATE(실업률), CPIAUCSL(소비자물가), T10Y2Y(장단기 금리차)
-  - **변동성 3개**: VIXCLS(VIX), VIXREM(VIX 3개월), VXMTSI(VXMT)
+  - **변동성 2개**: VIXCLS(VIX), VXVCLS(VIX 3개월)
 - FRED_API_KEY 필요 (.env에 설정되어 있음)
 - 증분 수집: 마지막 수집일 이후만 가져옴
 
@@ -140,14 +140,14 @@ get_series(series_id: str, as_of_date: str, conn=None) -> Optional[float]
 ```
 
 ### 소요 시간
-- 전체 수집: 약 1~2분 (13개 시리즈, 요청간 0.5초 딜레이)
+- 전체 수집: 약 1~2분 (12개 시리즈, 요청간 0.5초 딜레이)
 
 ### 주의사항
 - **FRED_API_KEY 필수** — .env 파일에 설정되어 있어야 함
 - `load_dotenv()` 호출 필요 (또는 환경변수로 직접 설정)
 - 일부 시리즈(UNRATE, CPIAUCSL)는 월간 데이터 (매일 값이 있지 않음)
-- **VIXREM, VXMTSI 2개는 FRED에서 폐지됨** — 수집 시 에러 나지만 정상임 (11/13 성공이 정상 결과)
-- 에러 로그에 `Bad Request. The series does not exist.` 나오면 무시해도 됨
+- 수집 대상은 FRED에서 조회 가능한 12개 시리즈 기준이며, `VXVCLS`를 VIX 3개월 지표로 사용함
+- 에러 로그에 `Bad Request. The series does not exist.`가 나오면 시리즈 ID를 먼저 확인해야 함
 
 ---
 

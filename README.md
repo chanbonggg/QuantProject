@@ -242,7 +242,7 @@ quant/
 | 테이블 | 내용 |
 |--------|------|
 | `raw.prices` | 주가 OHLCV (506개 티커, 2020~현재) |
-| `raw.fred_series` | 13개 거시지표 (VIX, HY, IG 등) |
+| `raw.fred_series` | 12개 거시지표 (VIX, VIX3M, HY, IG 등) |
 | `raw.sec_financials` | 재무제표 (501개 티커) |
 | `feature.regime_features` | 12개 레짐 피처 |
 | `feature.regime_labels` | 레짐 판단 결과 (A/B/C) |
