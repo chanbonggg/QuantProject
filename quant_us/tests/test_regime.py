@@ -137,7 +137,7 @@ def _insert_fred_data(conn: duckdb.DuckDBPyConnection, base_date: date, n_days: 
     """FRED 시리즈 모의 데이터 삽입."""
     series_values = {
         "VIXCLS": 18.5,
-        "VIXREM": 21.0,
+        "VXVCLS": 21.0,
         "BAMLH0A0HYM2": 350.0,
         "BAMLC0A0CM": 110.0,
         "T10Y2Y": 0.25,

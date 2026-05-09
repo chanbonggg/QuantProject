@@ -278,7 +278,7 @@ class TestFeaturesComputeDB:
             "INSERT INTO raw.fred_series VALUES ('VIXCLS', '2024-01-02', 20.0, NOW())"
         )
         conn.execute(
-            "INSERT INTO raw.fred_series VALUES ('VIXREM', '2024-01-02', 22.0, NOW())"
+            "INSERT INTO raw.fred_series VALUES ('VXVCLS', '2024-01-02', 22.0, NOW())"
         )
 
         result = compute_features("2024-01-02", conn)

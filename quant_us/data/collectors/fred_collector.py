@@ -2,11 +2,11 @@
 FRED 거시지표 수집기
 
 fredapi 라이브러리 우선 사용, FRED_API_KEY 없으면 FRED 웹 API 직접 호출로 폴백.
-수집 시리즈 (13개):
+수집 시리즈 (12개):
   금리: DFF, DGS3MO, DGS2, DGS10, DGS30
   크레딧: BAMLH0A0HYM2, BAMLC0A0CM
   경기: UNRATE, CPIAUCSL, T10Y2Y
-  변동성: VIXCLS, VIXREM, VXMTSI
+  변동성: VIXCLS, VXVCLS
 """
 
 import os
@@ -44,10 +44,9 @@ FRED_SERIES: list[str] = [
     "UNRATE",        # Unemployment Rate
     "CPIAUCSL",      # CPI-U (All items)
     "T10Y2Y",        # 10-Year minus 2-Year Treasury Spread
-    # 변동성 (3개)
+    # 변동성 (2개)
     "VIXCLS",        # VIX
-    "VIXREM",        # VIX 3-Month Forward
-    "VXMTSI",        # VXMT (VIX 20-Year Forward)
+    "VXVCLS",        # VIX3M (CBOE S&P 500 3-Month Volatility Index)
 ]
 
 FRED_API_BASE = "https://api.stlouisfed.org/fred/series/observations"

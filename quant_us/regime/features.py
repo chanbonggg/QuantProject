@@ -6,7 +6,7 @@ vxmt는 데이터 없으므로 항상 NaN.
 
 피처 목록:
   vix       — FRED VIXCLS
-  vix3m     — FRED VIX3M (VIXREM 시리즈 사용)
+  vix3m     — FRED VIX3M (VXVCLS 시리즈 사용)
   vxmt      — 항상 NaN (데이터 없음)
   vix_term  — vix3m / vix
   rv20      — SPY 20거래일 실현변동성 (연율화)
@@ -50,7 +50,7 @@ FEATURE_COLUMNS = [
 # FRED 시리즈 매핑: 피처명 → series_id
 FRED_SERIES_MAP = {
     "vix": "VIXCLS",
-    "vix3m": "VIXREM",      # VIX 3-Month Forward
+    "vix3m": "VXVCLS",      # VIX3M (CBOE 3-Month Volatility Index)
     "hy_spread": "BAMLH0A0HYM2",
     "ig_spread": "BAMLC0A0CM",
     "term_spread": "T10Y2Y",
