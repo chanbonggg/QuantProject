@@ -1,275 +1,158 @@
-# DB 마이그레이션 계획: DuckDB → PostgreSQL(OLTP) + DuckDB(OLAP)
+# Plan: daily_run 테스트 오류 3건 수정
 
-## 목표
-- 저장/쓰기: PostgreSQL (잠금 문제 해결)
-- 분석/읽기: DuckDB in-memory + postgres_scanner
-- 파일 구조 유지, DB 레이어만 교체
+## Context
 
-## 확정 결정사항
-- Q1: Docker PostgreSQL 15
-- Q2: 각 워커 독립 연결 (단순 방식)
-- Q3: SET search_path 방식 (기존 쿼리 무수정)
+2026-04-03 daily_run.py 실행 테스트에서 3가지 오류 발견:
+1. **FRED 시리즈 ID 오류**: VIXREM, VXMTSI가 FRED에 존재하지 않음 → 매 실행마다 실패 로그
+2. **날짜 계산 오류**: `datetime.today()` = 로컬 시간(KST) 사용 → 미국 미개장 날짜 수집 시도
+3. **가격 수집 거짓 양성**: `collect_daily()` 가 빈 데이터에도 "성공" 보고 (영향 낮음, 선택 수정)
 
----
+## 수정 대상 파일
 
-## PHASE 0: 사전 준비
-
-### Docker PostgreSQL 기동
-```bash
-docker run --name quant-pg \
-  -e POSTGRES_PASSWORD=quant \
-  -e POSTGRES_DB=quant_us \
-  -p 5432:5432 \
-  -d postgres:15
-```
-
-### requirements.txt 추가
-```
-psycopg2-binary==2.9.9
-```
-
-### .env 추가
-```
-PG_DSN=postgresql://postgres:quant@localhost:5432/quant_us
-```
+| 파일 | 변경 내용 |
+|------|----------|
+| `quant_us/data/collectors/fred_collector.py` | VIXREM→VXVCLS 교체, VXMTSI 제거 (13→12개) |
+| `quant_us/regime/features.py` | FRED_SERIES_MAP의 `vix3m` 매핑: VIXREM→VXVCLS |
+| `quant_us/scripts/daily_run.py` | `datetime.today()` → US Eastern 시간 사용 |
+| `tests/test_regime.py` | VIXREM → VXVCLS 테스트 픽스처 수정 |
 
 ---
 
-## PHASE 1: db/init.py 교체
+## STEP 1: FRED 시리즈 ID 수정 (VIXREM → VXVCLS, VXMTSI 제거)
 
-### 신규 함수
-- `get_pg_connection()` — psycopg2 연결 (쓰기용)
-- `get_duckdb_connection()` — DuckDB in-memory + postgres_scanner attach (읽기용)
-- `get_connection()` — 하위 호환 래퍼 → get_duckdb_connection() 반환
-- `init_db()` — PostgreSQL 스키마 초기화
+### 근본 원인
 
-### SQL 호환성 변경
-| DuckDB | PostgreSQL |
-|--------|-----------|
-| `VARCHAR` | `TEXT` |
-| `TIMESTAMP` | `TIMESTAMPTZ` |
-| `DOUBLE` | `DOUBLE PRECISION` |
-| `?` 플레이스홀더 | `%s` |
-| `INTERVAL 30 DAY` | `INTERVAL '30 days'` |
+시리즈 ID가 처음부터 잘못 등록됨:
+- `VIXREM` → **실제 존재하지 않는 ID**. 올바른 시리즈: **`VXVCLS`** (CBOE S&P 500 3-Month Volatility Index, 2007~현재)
+- `VXMTSI` → **FRED에 6개월 VIX 시리즈 자체가 없음**. CBOE에서 VIX6M을 발행하지만 FRED에는 미등록.
 
----
+### 1-1. `fred_collector.py` (라인 33-51)
 
-## PHASE 1 스키마 (postgresql-table-design 스킬 적용)
-
-```sql
-CREATE SCHEMA IF NOT EXISTS raw;
-CREATE SCHEMA IF NOT EXISTS feature;
-CREATE SCHEMA IF NOT EXISTS normalized;
-
--- raw.prices (777K행)
-CREATE TABLE IF NOT EXISTS raw.prices (
-    ticker       TEXT        NOT NULL,
-    date         DATE        NOT NULL,
-    open         DOUBLE PRECISION,
-    high         DOUBLE PRECISION,
-    low          DOUBLE PRECISION,
-    close        DOUBLE PRECISION,
-    adj_close    DOUBLE PRECISION,
-    volume       BIGINT,
-    market_cap   DOUBLE PRECISION,
-    source       TEXT,
-    collected_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    PRIMARY KEY (ticker, date)
-);
-CREATE INDEX IF NOT EXISTS idx_prices_date ON raw.prices (date DESC);
-
--- raw.fred_series (16K행)
-CREATE TABLE IF NOT EXISTS raw.fred_series (
-    series_id    TEXT        NOT NULL,
-    date         DATE        NOT NULL,
-    value        DOUBLE PRECISION,
-    collected_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    PRIMARY KEY (series_id, date)
-);
-
--- raw.sec_financials (39K행)
-CREATE TABLE IF NOT EXISTS raw.sec_financials (
-    ticker               TEXT,
-    cik                  TEXT,
-    filing_type          TEXT,
-    period_of_report     DATE,
-    filed_date           DATE,
-    revenue              DOUBLE PRECISION,
-    net_income           DOUBLE PRECISION,
-    eps_diluted          DOUBLE PRECISION,
-    total_assets         DOUBLE PRECISION,
-    stockholders_equity  DOUBLE PRECISION,
-    total_liabilities    DOUBLE PRECISION,
-    operating_cashflow   DOUBLE PRECISION,
-    cost_of_goods_sold   DOUBLE PRECISION,
-    collected_at         TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-CREATE INDEX IF NOT EXISTS idx_sec_ticker_filed
-    ON raw.sec_financials (ticker, filed_date DESC);
-
--- raw.sp500_changes
-CREATE TABLE IF NOT EXISTS raw.sp500_changes (
-    date        DATE NOT NULL,
-    ticker      TEXT NOT NULL,
-    action      TEXT NOT NULL CHECK (action IN ('add', 'remove')),
-    reason      TEXT,
-    replacement TEXT
-);
-CREATE INDEX IF NOT EXISTS idx_sp500_ticker_date ON raw.sp500_changes (ticker, date DESC);
-CREATE INDEX IF NOT EXISTS idx_sp500_action_date ON raw.sp500_changes (action, date DESC);
-
--- raw.ticker_events
-CREATE TABLE IF NOT EXISTS raw.ticker_events (
-    ticker      TEXT NOT NULL,
-    event_date  DATE NOT NULL,
-    event_type  TEXT NOT NULL CHECK (event_type IN ('delisted', 'merger', 'ticker_change')),
-    details     TEXT
-);
-CREATE INDEX IF NOT EXISTS idx_ticker_events_ticker ON raw.ticker_events (ticker, event_date DESC);
-
--- feature.regime_features
-CREATE TABLE IF NOT EXISTS feature.regime_features (
-    date         DATE PRIMARY KEY,
-    vix          DOUBLE PRECISION,
-    vix3m        DOUBLE PRECISION,
-    vxmt         DOUBLE PRECISION,
-    vix_term     DOUBLE PRECISION,
-    rv20         DOUBLE PRECISION,
-    rv60         DOUBLE PRECISION,
-    ma200_gap    DOUBLE PRECISION,
-    r12m         DOUBLE PRECISION,
-    r1m          DOUBLE PRECISION,
-    avg_corr20   DOUBLE PRECISION,
-    hy_spread    DOUBLE PRECISION,
-    ig_spread    DOUBLE PRECISION,
-    term_spread  DOUBLE PRECISION,
-    computed_at  TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
--- feature.regime_labels (raw_regime 컬럼 포함 → ALTER TABLE 불필요)
-CREATE TABLE IF NOT EXISTS feature.regime_labels (
-    date        DATE PRIMARY KEY,
-    regime      TEXT NOT NULL CHECK (regime IN ('A', 'B', 'C')),
-    shock_alarm BOOLEAN NOT NULL DEFAULT FALSE,
-    raw_regime  TEXT,
-    computed_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-CREATE INDEX IF NOT EXISTS idx_regime_labels_date_desc ON feature.regime_labels (date DESC);
-
--- feature.pipeline_log
-CREATE TABLE IF NOT EXISTS feature.pipeline_log (
-    run_date    DATE    NOT NULL,
-    step_name   TEXT    NOT NULL,
-    status      TEXT    NOT NULL CHECK (status IN ('success', 'error', 'skipped')),
-    detail      TEXT,
-    logged_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
-    PRIMARY KEY (run_date, step_name)
-);
-```
-
----
-
-## PHASE 2: 쓰기 모듈 6개 PostgreSQL 전환
-
-### 공통 변경 패턴
-- `import duckdb` → `import psycopg2`
-- `conn.execute(sql, params)` → `cur = conn.cursor(); cur.execute(sql, params)`
-- `?` → `%s` 플레이스홀더
-- `CAST(? AS DATE)` → `%s::date`
-- `INTERVAL 30 DAY` → `INTERVAL '30 days'`
-- 쓰기 후 `conn.commit()` 명시
-- 연결 타입힌트: `psycopg2.extensions.connection`
-
-### 파일별 핵심 변경
-
-#### price_collector.py
-- `conn.register("_bulk_df", df)` → `psycopg2.extras.execute_values()`
-- ThreadPoolExecutor: 각 워커에서 `get_pg_connection()` 독립 생성/해제
+**변경**: VIXREM → VXVCLS 교체, VXMTSI 제거 (13→12개)
 
 ```python
-# 변경 전
-conn.register("_bulk_df", df)
-conn.execute("INSERT ... FROM _bulk_df ON CONFLICT DO NOTHING")
+# BEFORE
+FRED_SERIES: list[str] = [
+    ...
+    "VIXCLS",        # VIX
+    "VIXREM",        # VIX 3-Month Forward         ← 잘못된 ID
+    "VXMTSI",        # VXMT (VIX 20-Year Forward)  ← FRED에 없음
+]
 
-# 변경 후
-from psycopg2.extras import execute_values
-rows = list(df[cols].itertuples(index=False, name=None))
-with conn.cursor() as cur:
-    execute_values(cur,
-        "INSERT INTO raw.prices (ticker,date,...) VALUES %s ON CONFLICT DO NOTHING",
-        rows, page_size=500)
-conn.commit()
+# AFTER
+FRED_SERIES: list[str] = [
+    ...
+    "VIXCLS",        # VIX (30일)
+    "VXVCLS",        # VIX3M (3개월) — CBOE S&P 500 3-Month Volatility Index
+]
 ```
 
-#### fred_collector.py
-- `executemany()` → `psycopg2.extras.execute_values()`
-- `ON CONFLICT ... DO UPDATE SET value = EXCLUDED.value` (PG 호환)
+**파일 상단 docstring 수정**: "수집 시리즈 (13개)" → "수집 시리즈 (12개)", "VIXREM" → "VXVCLS", VXMTSI 제거
 
-#### sec_collector.py, features.py, model.py, daily_run.py
-- `?` → `%s`, cursor 패턴, `conn.commit()`
-- model.py: `ALTER TABLE ADD COLUMN raw_regime` 블록 제거 (스키마에 포함됨)
-- daily_run.py: `CREATE TABLE pipeline_log` 블록 제거 (init_db로 이동)
+### 1-2. `regime/features.py` — FRED_SERIES_MAP 수정 (라인 51-57)
 
----
+**변경**: `vix3m` 매핑을 올바른 시리즈 ID로 교체
 
-## PHASE 3: 읽기 모듈 DuckDB(postgres_scanner) 전환
-
-### get_duckdb_connection() 패턴
 ```python
-def get_duckdb_connection() -> duckdb.DuckDBPyConnection:
-    con = duckdb.connect(":memory:")
-    con.execute("INSTALL postgres; LOAD postgres;")
-    pg_dsn = os.getenv("PG_DSN")
-    con.execute(f"ATTACH '{pg_dsn}' AS pg (TYPE POSTGRES, READ_ONLY);")
-    # search_path로 기존 쿼리 무수정 유지
-    con.execute("SET search_path = 'pg.raw,pg.feature,pg.normalized';")
-    return con
+# BEFORE
+FRED_SERIES_MAP = {
+    "vix": "VIXCLS",
+    "vix3m": "VIXREM",      # ← 잘못된 ID
+    ...
+}
+
+# AFTER
+FRED_SERIES_MAP = {
+    "vix": "VIXCLS",
+    "vix3m": "VXVCLS",      # VIX3M (CBOE 3-Month Volatility Index)
+    ...
+}
 ```
 
-### 영향 파일 (기존 쿼리 변경 없음)
-- strategies/ 5개, backtest/ 2개, portfolio/ 2개
-- monitor/dashboard.py, regime/shock_alarm.py, regime/features.py (읽기 부분)
+### 1-3. 하류 영향 분석 (변경 불필요)
+
+**vix3m과 vix_term이 정상 데이터를 받게 되므로, 기존 코드 전부 그대로 동작:**
+
+| 모듈 | 사용 | 변경 필요 |
+|------|------|----------|
+| `regime/features.py:369-374` | `vix_term = vix3m / vix` | 불필요 (vix3m이 이제 실제 값) |
+| `regime/model.py:269` | `b_vix_term = vix_term < 1.0` | 불필요 (실제 값으로 판단) |
+| `regime/shock_alarm.py:242-247` | VIX Backwardation 감지 | 불필요 (실제 값으로 판단) |
+| `monitor/dashboard.py:519-524` | VIX Term Structure 차트 | 불필요 (데이터 있으면 표시) |
+
+**핵심 개선**: vix_term이 항상 None이던 문제가 해결 → 레짐 B 판단에 VIX term structure 조건이 실제로 작동하게 됨
+
+### 1-4. `tests/test_regime.py` — 테스트 픽스처 수정
+
+테스트에서 `VIXREM` mock 데이터를 `VXVCLS`로 변경:
+- 라인 140: `"VIXREM": 21.0` → `"VXVCLS": 21.0`
+- 라인 281: INSERT 문의 series_id `VIXREM` → `VXVCLS`
+
+### 1-5. 기존 DB 데이터 처리
+
+VIXREM으로 저장된 기존 raw.fred_series 데이터는 쓸모없음 (잘못된 ID로 수집 자체가 실패했으므로 데이터 0건).
+VXVCLS로 새로 수집하면 2007년부터 데이터가 채워짐.
 
 ---
 
-## PHASE 4: 테스트 전략
+## STEP 2: 날짜 계산을 US Eastern으로 변경
 
-### 쓰기 테스트
-- `tests/conftest.py` 신규 작성
-- `pg_conn` fixture: 실제 로컬 PG 연결
-- 트랜잭션 롤백으로 테스트 격리
+### 2-1. `daily_run.py` 라인 732
 
-### 읽기 테스트
-- 기존 `duckdb.connect(":memory:")` 유지 (변경 없음)
+**문제**: `datetime.today()` = 시스템 로컬 시간(KST, UTC+9)
+- KST 04/04 오전 = US Eastern 04/03 오후 → 미국은 아직 04/03 장 진행 중
+- `bdate_range(..., end=today)` 에 04/03 포함 → 미완성 데이터 수집 시도
+
+**변경**:
+
+```python
+# BEFORE
+today = datetime.today().strftime("%Y-%m-%d")
+
+# AFTER
+from zoneinfo import ZoneInfo
+today = datetime.now(ZoneInfo("America/New_York")).strftime("%Y-%m-%d")
+```
+
+**참고**: Python 3.9+ 내장 `zoneinfo` 사용 (pytz 불필요)
+
+### 2-2. import 추가
+
+`daily_run.py` 상단 import 섹션에 `from zoneinfo import ZoneInfo` 추가.
 
 ---
 
-## PHASE 5: 데이터 마이그레이션
+## STEP 3 (선택): 가격 수집 거짓 양성 개선
+
+**현재 영향**: 운영 중 미래 날짜 호출은 STEP 2 수정으로 사라짐.
+**결론**: STEP 2 수정으로 근본 원인 제거됨. 추가 수정 불필요.
+
+---
+
+## 수정하지 않는 것들
+
+- DB 스키마 (`feature.regime_features` 테이블): vix3m, vxmt, vix_term 컬럼 유지
+- `FEATURE_COLUMNS` 리스트: 유지 (DB 컬럼 순서와 일치해야 함)
+- `collect_daily()` 반환 타입: bool → int 변경은 별도 작업 (이번 범위 아님)
+- vix_term 계산 로직: 변경 없음 (VXVCLS로 교체하면 자연 정상화)
+- regime/model.py, shock_alarm.py, dashboard.py: 변경 없음 (vix3m/vix_term 데이터가 채워지면 기존 코드 정상 동작)
+
+---
+
+## 검증
 
 ```bash
-# 1. 백업
-cp ./data/quant_us.duckdb ./data/quant_us_backup_20260327.duckdb
+# 1. 테스트 실행
+python -m pytest tests/test_regime.py -v
+python -m pytest tests/test_daily_run.py -v
+python -m pytest tests/ -v
 
-# 2. PG 스키마 초기화
-python -c "from quant_us.db.init import init_db; init_db()"
+# 2. FRED 수집 확인 (12개 전체 성공 예상)
+python -c "from quant_us.data.collectors.fred_collector import collect_all; collect_all()"
 
-# 3. 마이그레이션 스크립트 실행
-python scripts/migrate_duckdb_to_pg.py
+# 3. dry-run으로 날짜 확인 (US Eastern 기준)
+python quant_us/scripts/daily_run.py --dry-run
+
+# 4. 실제 파이프라인 실행 (최신 영업일)
+python quant_us/scripts/daily_run.py
 ```
-
-### 검증 기준
-- [ ] `raw.prices` COUNT 일치
-- [ ] `daily_run.py --dry-run` 10단계 통과
-- [ ] pytest 221개 전원 통과
-- [ ] Streamlit 대시보드 정상 렌더링
-
----
-
-## 리스크
-
-| 항목 | 수준 | 완화 |
-|------|------|------|
-| ThreadPoolExecutor + psycopg2 | 높음 | 워커 독립 연결 |
-| postgres_scanner search_path | 중간 | PHASE 3 후 전체 쿼리 테스트 |
-| commit 누락 | 중간 | 각 쓰기 함수 종료 시 강제 |
-| 데이터 마이그레이션 손실 | 높음 | 사전 백업 필수 |
