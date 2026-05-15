@@ -500,10 +500,6 @@ def compute_portfolio_stats(
             'estimated_annual_vol': float | None,  # 추정 연율 변동성
         }
     """
-    close_conn = conn is None
-    if conn is None:
-        conn = get_connection()
-
     logger.info(f"[포트폴리오 최적화] compute_portfolio_stats 시작: {date}")
 
     try:
@@ -526,8 +522,21 @@ def compute_portfolio_stats(
         # 상위 5종목 비중 합
         top_5_weight = float(np.sort(weights)[::-1][:5].sum())
 
-        # 추정 연율 변동성 (가용 데이터 있는 경우)
-        estimated_vol = _estimate_portfolio_vol(portfolio, date, conn)
+        # 추정 연율 변동성 (연결/가격 데이터가 있는 경우만)
+        estimated_vol = None
+        close_conn = False
+        if conn is None:
+            try:
+                conn = get_connection()
+                close_conn = True
+            except Exception as e:
+                logger.debug(f"[포트폴리오 최적화] 변동성 추정 스킵: DB 연결 실패 ({e})")
+
+        if conn is not None:
+            try:
+                estimated_vol = _estimate_portfolio_vol(portfolio, date, conn)
+            except Exception as e:
+                logger.debug(f"[포트폴리오 최적화] 변동성 추정 스킵: {e}")
 
         stats = {
             "n_stocks": n_stocks,
@@ -547,7 +556,7 @@ def compute_portfolio_stats(
         return stats
 
     finally:
-        if close_conn:
+        if "close_conn" in locals() and close_conn:
             conn.close()
 
 

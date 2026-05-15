@@ -811,9 +811,9 @@ def _save_regime_label(
     기존 데이터 DELETE 후 INSERT.
     """
     logger.info(f"[레짐 모델] regime_labels 저장 시작: {date_str}")
-    pg_conn = get_pg_connection()
-    cur = pg_conn.cursor()
     try:
+        pg_conn = get_pg_connection()
+        cur = pg_conn.cursor()
         cur.execute(
             "DELETE FROM feature.regime_labels WHERE date = %s::date",
             (date_str,),
@@ -828,12 +828,17 @@ def _save_regime_label(
         pg_conn.commit()
         logger.info(f"[레짐 모델] regime_labels 저장 완료: {date_str} → regime={regime}, shock={shock_alarm}")
     except Exception as e:
-        pg_conn.rollback()
-        logger.error(f"[레짐 모델] regime_labels 저장 실패: {date_str}, 오류={e}")
-        raise
+        try:
+            pg_conn.rollback()
+        except Exception:
+            pass
+        logger.warning(f"[레짐 모델] PostgreSQL regime_labels 저장 실패: {date_str}, 오류={e}")
     finally:
-        cur.close()
-        pg_conn.close()
+        try:
+            cur.close()
+            pg_conn.close()
+        except Exception:
+            pass
 
     # 테스트 환경(인메모리 DuckDB)에서도 읽기가 가능하도록 DuckDB conn에도 best-effort 저장
     try:

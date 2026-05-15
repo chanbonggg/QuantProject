@@ -451,6 +451,9 @@ def _step_strategy_signals(date_str: str, conn) -> tuple[dict, Optional[pd.DataF
     """7단계: 전략 신호 산출 (매일 생성, 리밸런싱 선택)."""
     logger.info(f"[파이프라인] [7/10] 전략 신호 산출: {date_str}")
 
+    if not _is_rebalance_date(date_str):
+        return _make_step_result("전략신호", "skipped", "리밸런싱일 아님"), None
+
     if not _WEIGHT_ENGINE_AVAILABLE:
         return _make_step_result("전략신호", "error", "portfolio.weight_engine 임포트 실패"), None
 
@@ -632,12 +635,14 @@ def _step_slack_summary(date_str: str, steps: list, alerts: list, portfolio: Opt
 # 메인 파이프라인
 # ---------------------------------------------------------------------------
 
-def _run_single_date(date_str: str, dry_run: bool = False) -> dict:
+def _run_single_date(date_str: str, dry_run: bool = False, conn=None) -> dict:
     """단일 날짜에 대해 파이프라인 실행."""
     logger.info(f"[파이프라인] 단일 날짜 실행: {date_str} (dry_run={dry_run})")
 
     # DB 연결
-    conn = get_connection()
+    close_conn = conn is None
+    if conn is None:
+        conn = get_connection()
     steps: list = []
     alerts: list = []
     final_portfolio: Optional[pd.DataFrame] = None
@@ -686,7 +691,7 @@ def _run_single_date(date_str: str, dry_run: bool = False) -> dict:
         _send_slack_alert(f"파이프라인 비정상 종료 ({date_str}): {e}", level="CRITICAL")
         steps.append(_make_step_result("비정상종료", "error", str(e)))
     finally:
-        if conn is not None:
+        if close_conn and conn is not None:
             try:
                 conn.close()
             except Exception:
@@ -758,7 +763,7 @@ def run_pipeline(
         logger.info(f"[파이프라인] {'=' * 60}")
         logger.info(f"[파이프라인] 배치 실행: {date_str} ({len(all_results)+1}/{len(dates)})")
         logger.info(f"[파이프라인] {'=' * 60}")
-        result = _run_single_date(date_str, dry_run)
+        result = _run_single_date(date_str, dry_run, conn=conn)
         all_results.append(result)
 
     # 마지막 실행 결과 반환 (모든 결과는 로그에 남음)

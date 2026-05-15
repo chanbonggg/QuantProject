@@ -263,40 +263,70 @@ class PortfolioState:
             if cash_amount is None:
                 cash_amount = self.total_value - equity_value
 
-            # PostgreSQL에 INSERT
-            conn = get_pg_connection()
-            cur = conn.cursor()
+            params = [
+                date,
+                self.total_value,
+                cash_amount,
+                equity_value,
+                target_portfolio_json,
+                max_drift,
+                rebalance_triggered,
+                reason,
+            ]
 
-            cur.execute(
-                """
-                INSERT INTO normalized.portfolio_state
-                (date, total_value, cash_amount, equity_value, target_portfolio,
-                 current_drift, rebalance_triggered, rebalance_reason)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                ON CONFLICT (date) DO UPDATE SET
-                    total_value = EXCLUDED.total_value,
-                    cash_amount = EXCLUDED.cash_amount,
-                    equity_value = EXCLUDED.equity_value,
-                    target_portfolio = EXCLUDED.target_portfolio,
-                    current_drift = EXCLUDED.current_drift,
-                    rebalance_triggered = EXCLUDED.rebalance_triggered,
-                    rebalance_reason = EXCLUDED.rebalance_reason
-                """,
-                [
-                    date,
-                    self.total_value,
-                    cash_amount,
-                    equity_value,
-                    target_portfolio_json,
-                    max_drift,
-                    rebalance_triggered,
-                    reason,
-                ],
-            )
+            try:
+                conn = get_pg_connection()
+                cur = conn.cursor()
+                cur.execute(
+                    """
+                    INSERT INTO normalized.portfolio_state
+                    (date, total_value, cash_amount, equity_value, target_portfolio,
+                     current_drift, rebalance_triggered, rebalance_reason)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (date) DO UPDATE SET
+                        total_value = EXCLUDED.total_value,
+                        cash_amount = EXCLUDED.cash_amount,
+                        equity_value = EXCLUDED.equity_value,
+                        target_portfolio = EXCLUDED.target_portfolio,
+                        current_drift = EXCLUDED.current_drift,
+                        rebalance_triggered = EXCLUDED.rebalance_triggered,
+                        rebalance_reason = EXCLUDED.rebalance_reason
+                    """,
+                    params,
+                )
+                conn.commit()
+                cur.close()
+                conn.close()
+            except Exception as e:
+                try:
+                    conn.rollback()
+                    cur.close()
+                    conn.close()
+                except Exception:
+                    pass
+                logger.warning(f"[PortfolioState 저장] PostgreSQL 저장 실패, 주입 conn 저장 시도: {e}")
 
-            conn.commit()
-            cur.close()
-            conn.close()
+            try:
+                self.conn.execute(
+                    """
+                    INSERT INTO normalized.portfolio_state
+                    (date, total_value, cash_amount, equity_value, target_portfolio,
+                     current_drift, rebalance_triggered, rebalance_reason)
+                    VALUES (CAST(? AS DATE), ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT (date) DO UPDATE SET
+                        total_value = EXCLUDED.total_value,
+                        cash_amount = EXCLUDED.cash_amount,
+                        equity_value = EXCLUDED.equity_value,
+                        target_portfolio = EXCLUDED.target_portfolio,
+                        current_drift = EXCLUDED.current_drift,
+                        rebalance_triggered = EXCLUDED.rebalance_triggered,
+                        rebalance_reason = EXCLUDED.rebalance_reason
+                    """,
+                    params,
+                )
+                self.conn.commit()
+            except Exception as e:
+                logger.debug(f"[PortfolioState 저장] 주입 conn 저장 스킵: {e}")
 
             logger.info(
                 f"[PortfolioState 저장] {date}: "

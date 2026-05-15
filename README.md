@@ -95,7 +95,7 @@ python -c "from quant_us.db.init import init_db; init_db()"
 
 ```bash
 # 1. 주가 수집 (2020년 ~ 현재)
-python scripts/collect_2025_2026.py
+python scripts/data_collection/collect_2025_2026.py
 
 # 2. FRED 거시지표 수집
 python -c "
@@ -104,7 +104,7 @@ collect_all('2020-01-01')
 "
 
 # 3. SEC 재무제표 수집 (수 시간 소요)
-python scripts/collect_sec_all.py
+python scripts/data_collection/collect_sec_all.py
 ```
 
 ---

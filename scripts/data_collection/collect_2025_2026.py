@@ -17,7 +17,9 @@ from pathlib import Path
 import pandas as pd
 import yfinance as yf
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(PROJECT_ROOT))
+sys.path.insert(0, str(PROJECT_ROOT / "quant_us"))
 from quant_us.utils.logger import logger
 from quant_us.data.collectors.price_collector import SP500_TICKERS
 from quant_us.data.collectors.fred_collector import FRED_SERIES, _fetch_series
@@ -26,7 +28,7 @@ from quant_us.data.collectors.fred_collector import FRED_SERIES, _fetch_series
 
 START_DATE = "2025-01-01"
 END_DATE   = "2026-03-28"   # yfinance end는 exclusive, 하루 더
-OUTPUT_DIR = Path(__file__).parent.parent / "data" / "collected"
+OUTPUT_DIR = PROJECT_ROOT / "data" / "collected"
 PRICE_FILE = OUTPUT_DIR / "prices_2025_2026.parquet"
 FRED_FILE  = OUTPUT_DIR / "fred_2025_2026.parquet"
 

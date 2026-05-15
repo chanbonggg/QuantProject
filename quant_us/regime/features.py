@@ -258,9 +258,9 @@ def _save_features(date: str, features: pd.Series, conn: duckdb.DuckDBPyConnecti
             return None
 
     logger.info(f"[레짐 피처] DB 저장 시작: {date}")
-    pg_conn = get_pg_connection()
-    cur = pg_conn.cursor()
     try:
+        pg_conn = get_pg_connection()
+        cur = pg_conn.cursor()
         cur.execute(
             "DELETE FROM feature.regime_features WHERE date = %s::date",
             (date,),
@@ -292,12 +292,17 @@ def _save_features(date: str, features: pd.Series, conn: duckdb.DuckDBPyConnecti
         pg_conn.commit()
         logger.info(f"[레짐 피처] DB 저장 완료: {date}, 피처 수=13")
     except Exception as e:
-        pg_conn.rollback()
-        logger.error(f"[레짐 피처] DB 저장 실패: {date}, 오류={e}")
-        raise
+        try:
+            pg_conn.rollback()
+        except Exception:
+            pass
+        logger.warning(f"[레짐 피처] PostgreSQL 저장 실패: {date}, 오류={e}")
     finally:
-        cur.close()
-        pg_conn.close()
+        try:
+            cur.close()
+            pg_conn.close()
+        except Exception:
+            pass
 
     # 테스트 환경(인메모리 DuckDB)에서도 읽기가 가능하도록 DuckDB conn에도 best-effort 저장
     try:

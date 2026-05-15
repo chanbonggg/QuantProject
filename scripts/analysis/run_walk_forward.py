@@ -9,7 +9,8 @@ import pickle
 import pandas as pd
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent / "quant_us"))
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(PROJECT_ROOT / "quant_us"))
 
 from db.init import get_connection
 from backtest.walk_forward import run_wfa

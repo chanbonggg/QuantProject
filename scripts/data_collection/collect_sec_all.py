@@ -7,15 +7,14 @@ import time
 from pathlib import Path
 
 sys.stdout.reconfigure(encoding='utf-8', errors='replace')
-sys.path.insert(0, str(Path(__file__).parent.parent / "quant_us"))
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(PROJECT_ROOT / "quant_us"))
 
 from data.collectors.sec_collector import collect_financials
 from db.init import get_connection
 from utils.logger import logger
 
-# S&P500 전체 티커 리스트
-sys.path.insert(0, str(Path(__file__).parent.parent))
-from sp500_tickers_list import SP500_TICKERS
+from data.collectors.price_collector import SP500_TICKERS
 
 
 def main():
@@ -31,6 +30,7 @@ def main():
 
     remaining = [t for t in SP500_TICKERS if t not in existing]
     logger.info(f"[SEC 전체수집] 수집 대상: {len(remaining)}개 티커")
+    conn.close()
 
     total_rows = 0
     success = 0
@@ -38,7 +38,7 @@ def main():
 
     for i, ticker in enumerate(remaining, 1):
         try:
-            n = collect_financials(ticker, start_year=2015, conn=conn)
+            n = collect_financials(ticker, start_year=2015)
             total_rows += n
             if n > 0:
                 success += 1
@@ -53,8 +53,6 @@ def main():
 
         # SEC Rate Limit 추가 안전장치
         time.sleep(0.15)
-
-    conn.close()
 
     logger.info(
         f"[SEC 전체수집] 완료! "

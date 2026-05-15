@@ -12,8 +12,8 @@
 
 - `quant_us/scripts/daily_run.py`
 - `quant_us/data/collectors/sec_collector.py`
-- `scripts/collect_sec_all.py`
-- `scripts/recollect_sec_all.py`
+- `scripts/data_collection/collect_sec_all.py`
+- `scripts/data_collection/recollect_sec_all.py`
 - `README.md`
 
 ## 구현 단계
