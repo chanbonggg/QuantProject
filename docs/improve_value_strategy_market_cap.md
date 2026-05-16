@@ -36,7 +36,7 @@
 진단:
 
 ```powershell
-python -c "import sys; sys.path.insert(0, 'quant_us'); from db.init import get_connection; c=get_connection(); print(c.execute('SELECT COUNT(*) FROM raw.prices WHERE market_cap IS NOT NULL').fetchone()); c.close()"
+python -c "import sys; sys.path.insert(0, 'quant_us'); from db.init import get_pg_connection; c=get_pg_connection(); cur=c.cursor(); cur.execute('SELECT COUNT(*) FROM raw.prices WHERE market_cap IS NOT NULL'); print(cur.fetchone()); c.close()"
 ```
 
 ## 주의사항

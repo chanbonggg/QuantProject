@@ -46,3 +46,4 @@ python quant_us/scripts/daily_run.py --date 2026-04-02 --dry-run
 
 - 기존 `normalized.portfolio_state` 데이터는 삭제하지 않는다.
 - 설정 기본값 변경 시 과거 drift 기록과 비교가 어려워질 수 있으므로 기록에 total_value를 계속 저장한다.
+- PostgreSQL 단일화 방침에 맞춰 신규 설정 로딩과 테스트는 PostgreSQL 기준으로 작성한다.

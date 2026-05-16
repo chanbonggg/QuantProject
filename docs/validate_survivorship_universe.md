@@ -32,7 +32,7 @@ S&P500 과거 구성종목 복원, 편입/편출, 상장폐지/합병 처리 로
 DB 상태 확인:
 
 ```powershell
-python -c "import sys; sys.path.insert(0, 'quant_us'); from db.init import get_connection; c=get_connection(); print(c.execute('SELECT action, COUNT(*) FROM raw.sp500_changes GROUP BY action').fetchall()); print(c.execute('SELECT COUNT(*) FROM raw.ticker_events').fetchone()); c.close()"
+python -c "import sys; sys.path.insert(0, 'quant_us'); from db.init import get_pg_connection; c=get_pg_connection(); cur=c.cursor(); cur.execute('SELECT action, COUNT(*) FROM raw.sp500_changes GROUP BY action'); print(cur.fetchall()); cur.execute('SELECT COUNT(*) FROM raw.ticker_events'); print(cur.fetchone()); c.close()"
 ```
 
 ## 주의사항

@@ -58,26 +58,16 @@ pip install -r quant_us/requirements.txt
 `.env.example`을 복사해서 `.env`로 만들고 설정:
 
 ```env
-# 필수
-PG_DSN=postgresql://postgres:quant@127.0.0.1:5433/quant_us
+# 필수: 로컬 Windows PostgreSQL 기준
+PG_DSN=postgresql://postgres:<password>@127.0.0.1:5432/quant_us
 
 # 선택
 SLACK_WEBHOOK_URL=https://hooks.slack.com/...   # Slack 알람 (없으면 스킵)
 ```
 
-### 4. PostgreSQL 컨테이너 실행
+### 4. PostgreSQL 준비
 
-```bash
-# 최초 1회 — 컨테이너 생성
-docker run -d --name quant_pg -p 5433:5432 \
-  -e POSTGRES_PASSWORD=quant \
-  -e POSTGRES_DB=quant_us \
-  -e POSTGRES_HOST_AUTH_METHOD=trust \
-  postgres:15
-
-# 이후 재시작할 때
-docker start quant_pg
-```
+현재 운영 기준은 Docker가 아니라 로컬 PostgreSQL `127.0.0.1:5432/quant_us`다. 과거 Docker `5433` 기준 문서는 보관 이력이며 신규 작업 기준으로 사용하지 않는다.
 
 ### 5. DB 스키마 초기화
 
@@ -234,8 +224,9 @@ quant/
 
 | DB | 역할 | 연결 |
 |----|------|------|
-| **PostgreSQL** (포트 5433) | 데이터 저장 (쓰기) | `get_pg_connection()` |
-| **DuckDB** (in-memory) | 데이터 분석 (읽기) | `get_connection()` |
+| **PostgreSQL** (포트 5432) | 데이터 저장/읽기/분석 | `get_pg_connection()` / 전환 후 `get_connection()` |
+
+현재 전환 방침은 PostgreSQL 단일화다. DuckDB in-memory + postgres_scanner 읽기 레이어는 점진적으로 제거하고, 신규 코드는 PostgreSQL 기준으로 작성한다.
 
 **주요 테이블:**
 

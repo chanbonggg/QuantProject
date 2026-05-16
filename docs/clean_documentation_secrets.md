@@ -6,7 +6,7 @@
 
 ## 배경
 
-현재 개인 로컬 운영을 위해 `AGENTS.md`에는 PG_DSN 기준을 기록해 두었지만, 장기적으로는 문서에서 비밀번호/API 키 노출을 줄이는 편이 안전하다. 또한 Docker 5433 기준과 로컬 PostgreSQL 5432 기준이 문서에 섞여 있을 수 있다.
+현재 개인 로컬 운영을 위해 `AGENTS.md`에는 PG_DSN 기준을 기록해 두었지만, 장기적으로는 문서에서 비밀번호/API 키 노출을 줄이는 편이 안전하다. 또한 현재 목표는 PostgreSQL 단일화이며, Docker 5433 기준과 DuckDB 기준 문서는 현재 가이드에서 제거해야 한다.
 
 ## 대상 파일
 
@@ -15,7 +15,7 @@
 - `README.md`
 - `DATA_COLLECTION_GUIDE.md`
 - `.env.example`
-- 기타 `rg "PG_DSN|FRED_API_KEY|rlacksdud|quant@127|5433|VIXREM|VXMTSI"`에 잡히는 문서
+- 기타 `rg "PG_DSN|FRED_API_KEY|rlacksdud|quant@127|5433|DuckDB|duckdb|VIXREM|VXMTSI"`에 잡히는 문서
 
 ## 구현 단계
 
@@ -29,11 +29,10 @@
 ## 검증
 
 ```powershell
-rg "rlacksdud|FRED_API_KEY=.*[A-Za-z0-9]{10,}|postgres:quant@|127.0.0.1:5433|VIXREM|VXMTSI" AGENTS.md done.md README.md DATA_COLLECTION_GUIDE.md quant_us -n
+rg "rlacksdud|FRED_API_KEY=.*[A-Za-z0-9]{10,}|postgres:quant@|127.0.0.1:5433|DuckDB|duckdb|VIXREM|VXMTSI" AGENTS.md done.md README.md DATA_COLLECTION_GUIDE.md quant_us -n
 ```
 
 ## 주의사항
 
 - 실제 `.env` 파일은 사용자의 로컬 운영에 필요하므로 무단 삭제하지 않는다.
 - 공개 저장소에 올릴 가능성이 있으면 비밀번호/API 키는 반드시 제거한다.
-

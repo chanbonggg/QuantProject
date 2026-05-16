@@ -101,7 +101,7 @@ PG_DSN=postgresql://postgres:rlacksdud1%21@127.0.0.1:5432/quant_us
 ### 연결 확인
 
 ```powershell
-python -c "import sys; sys.path.insert(0, 'quant_us'); from db.init import get_connection; c=get_connection(); print(c.execute('SELECT COUNT(*) FROM raw.prices').fetchone()); c.close()"
+python -c "import sys; sys.path.insert(0, 'quant_us'); from db.init import get_pg_connection; c=get_pg_connection(); cur=c.cursor(); cur.execute('SELECT COUNT(*) FROM raw.prices'); print(cur.fetchone()); c.close()"
 ```
 
 정상 출력 예시:
@@ -112,30 +112,29 @@ python -c "import sys; sys.path.insert(0, 'quant_us'); from db.init import get_c
 
 ---
 
-## DB 아키텍처
+## DB 아키텍처 전환 방침
 
-DuckDB 단일 파일은 잠금 문제가 커서 운영 DB로 쓰지 않는다. 현재 기준은 **PostgreSQL 저장 + DuckDB in-memory 분석 읽기**다.
+앞으로 목표 아키텍처는 **PostgreSQL 단일화**다. DuckDB 단일 파일은 잠금 문제가 있었고, DuckDB in-memory + postgres_scanner 읽기 레이어는 현재 프로젝트 규모에서 연결/테스트/placeholder 복잡도를 키운다.
 
-| 레이어           | 역할           | 연결 방식                                        | 플레이스홀더 |
-| ---------------- | -------------- | ------------------------------------------------ | ------------ |
-| PostgreSQL       | 쓰기/저장 OLTP | `get_pg_connection()` psycopg2                 | `%s`       |
-| DuckDB in-memory | 읽기/분석 OLAP | `get_connection()` = DuckDB + postgres_scanner | `?`        |
+| 레이어 | 역할 | 연결 방식 | 플레이스홀더 |
+| ------ | ---- | --------- | ------------ |
+| PostgreSQL | 쓰기/저장/읽기/분석 | psycopg2 또는 SQLAlchemy/pandas read_sql | `%s` 기준으로 통일 |
 
-연결 함수:
+전환 목표:
 
 ```python
-get_pg_connection()      # 쓰기 전용, psycopg2 conn 반환
-get_connection()         # 읽기 전용, DuckDB in-memory + postgres_scanner
-get_duckdb_connection()  # get_connection() 내부 구현
-init_db()                # PostgreSQL 스키마/테이블 생성
+get_pg_connection()  # PostgreSQL 연결 반환
+get_connection()     # 전환 후 PostgreSQL 연결 또는 명확한 wrapper로 정리
+init_db()            # PostgreSQL 스키마/테이블 생성
 ```
 
 코딩 규칙:
 
-- 쓰기 함수는 `get_pg_connection()` 사용, `%s` placeholder 사용
-- 읽기 함수는 가능하면 `conn` 파라미터를 받고 DuckDB `?` placeholder 사용
-- 테스트/분석 함수는 `conn` 주입이 실제로 동작해야 함
-- 저장 함수는 테스트 호환을 위해 PG 저장 후 DuckDB `conn`에도 best-effort 저장하는 기존 패턴을 고려
+- 신규 코드는 PostgreSQL 기준으로 작성한다.
+- 신규 쿼리는 `%s` placeholder 기준으로 작성한다.
+- DuckDB 전용 `.df()`, `?` placeholder, `postgres_scanner` 의존을 새로 늘리지 않는다.
+- 기존 DuckDB 주입 테스트는 PostgreSQL 테스트 DB 또는 모킹/fixture 방식으로 점진 전환한다.
+- 운영 DB는 로컬 Windows PostgreSQL `127.0.0.1:5432/quant_us` 기준이다.
 
 ---
 
@@ -147,15 +146,12 @@ init_db()                # PostgreSQL 스키마/테이블 생성
   ├─ FRED: VIX, 금리, 크레딧, 경기 지표 수집
   └─ SEC: 10-K/10-Q 재무제표 수집
         ↓
-PostgreSQL 저장
+PostgreSQL 저장/읽기/분석
   ├─ raw.prices
   ├─ raw.fred_series
   ├─ raw.sec_financials
   ├─ raw.sp500_changes
   └─ raw.ticker_events
-        ↓
-DuckDB in-memory 읽기 레이어
-  └─ postgres_scanner로 로컬 PostgreSQL을 read-only attach
         ↓
 레짐 피처 산출
   ├─ VIX / VIX3M / VIX term
@@ -196,7 +192,7 @@ DuckDB in-memory 읽기 레이어
 
 | 파일                                            | 역할                                                   |
 | ----------------------------------------------- | ------------------------------------------------------ |
-| `quant_us/db/init.py`                         | PostgreSQL 연결, DuckDB 읽기 연결, 스키마 생성         |
+| `quant_us/db/init.py`                         | PostgreSQL 연결, 스키마 생성, PostgreSQL 단일화 전환 대상 |
 | `quant_us/data/collectors/price_collector.py` | yfinance 가격 수집, S&P500 구성/변경 이력 수집         |
 | `quant_us/data/collectors/fred_collector.py`  | FRED 거시지표 수집                                     |
 | `quant_us/data/collectors/sec_collector.py`   | SEC EDGAR 재무제표 수집, filed_date 기준 룩어헤드 방지 |
@@ -252,10 +248,11 @@ DuckDB in-memory 읽기 레이어
    - `VIXREM`은 `VXVCLS`로 교체 필요.
    - `VXMTSI`는 FRED에 없으므로 제거 또는 별도 데이터 소스 필요.
    - 대상 파일: `fred_collector.py`, `regime/features.py`, 관련 테스트.
-2. **테스트 가능성 개선**
+2. **PostgreSQL 단일화 및 테스트 가능성 개선**
 
-   - `run_pipeline(date, conn=...)` 시그니처가 있으나 내부에서 `get_connection()`을 새로 호출하는 문제가 있었음.
-   - 테스트용 in-memory DuckDB/모킹 conn이 실제로 주입되도록 정리 필요.
+   - 현재 코드에는 DuckDB 전용 `?` placeholder와 `.df()` 호출이 남아 있음.
+   - `get_connection()`/`get_pg_connection()` 역할을 PostgreSQL 기준으로 정리 필요.
+   - 테스트는 DuckDB fixture 의존에서 PostgreSQL 테스트 DB 또는 명확한 mock/fixture로 전환 필요.
 3. **운영 하드코딩 제거**
 
    - `PortfolioState(total_value=500)` 하드코딩 제거.

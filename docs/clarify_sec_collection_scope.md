@@ -40,3 +40,4 @@ python quant_us/scripts/daily_run.py --date 2026-04-01 --dry-run
 
 - SEC 전체 수집은 오래 걸리고 외부 API rate limit이 있으므로 기본 일일 파이프라인에 무조건 넣지 않는다.
 - 수집 실패가 포트폴리오 산출 전체를 막지 않도록 graceful degradation 유지.
+- PostgreSQL 단일화 방침에 맞춰 신규 수집/저장 경로는 PostgreSQL 연결만 사용한다.

@@ -61,7 +61,7 @@ python -c "from quant_us.db.init import init_db; init_db()"
 - [ ] **클래스**: `PortfolioState`
 - [ ] **메서드들**:
 
-#### `__init__(total_value: float, conn: DuckDBPyConnection)`
+#### `__init__(total_value: float, conn: PostgreSQL connection)`
 - 사용자 입력 자본금 저장
 - DB 연결 저장
 

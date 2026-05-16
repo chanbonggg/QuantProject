@@ -13,12 +13,13 @@ E:\personal project\quant\
 ## 환경변수 (.env 파일)
 
 ```
-FRED_API_KEY=7f5eeffdaeef4817444aa2fbc331338c
-DB_PATH=./data/quant_us.duckdb
+FRED_API_KEY=<your_fred_api_key>
+PG_DSN=postgresql://postgres:<password>@127.0.0.1:5432/quant_us
 ```
 
 - `.env` 파일은 프로젝트 루트(`E:\personal project\quant\.env`)에 있음
-- DB 파일: `E:\personal project\quant\data\quant_us.duckdb`
+- 현재 목표 DB 구조는 PostgreSQL 단일화임
+- DuckDB 파일 또는 DuckDB in-memory 읽기 레이어는 신규 작업 기준으로 사용하지 않음
 
 ---
 
@@ -82,7 +83,7 @@ collect_daily(target_date: str, conn=None) -> bool
 
 ### 주의사항
 - yfinance는 가끔 타임아웃 발생 → 자동 2회 재시도 내장
-- 멀티스레딩 사용 중 가끔 DuckDB 동시성 에러 발생 (503개 중 1~2개) → 재실행하면 해결됨
+- 신규 작업 기준으로 DuckDB 동시성 문제를 피하기 위해 PostgreSQL 단일화를 진행함
 - 주말/공휴일은 데이터 없음 (정상)
 - 거래시간 중 수집하면 당일 데이터는 불완전할 수 있음 → 미국장 마감(EST 16:00) 이후 수집 권장
 - 이미 수집된 날짜는 자동 스킵되므로 같은 명령어 여러 번 실행해도 문제 없음
@@ -228,9 +229,9 @@ cd "E:\personal project\quant"
 
 python -c "
 import sys; sys.path.insert(0, 'quant_us')
-from db.init import get_connection
+from db.init import get_pg_connection
 
-conn = get_connection()
+conn = get_pg_connection()
 
 # 주가
 r = conn.execute('SELECT COUNT(*), COUNT(DISTINCT ticker), MIN(date), MAX(date) FROM raw.prices').fetchone()
@@ -324,4 +325,4 @@ python quant_us/scripts/daily_run.py --date 2024-12-31 --dry-run
 | SEC 수집 429 에러 | Rate Limit 초과 | 자동 재시도 내장, 심하면 잠시 후 재실행 |
 | yfinance 타임아웃 | 네트워크 문제 | 자동 2회 재시도 내장, VPN 확인 |
 | DB 파일 없음 | 초기화 안됨 | `python quant_us/db/init.py` 실행 |
-| `DuckDB IOException` | DB 파일 다른 프로세스가 사용 중 | 대시보드나 다른 파이썬 프로세스 종료 후 재실행 |
+| PostgreSQL 연결 실패 | `PG_DSN` 오류, 서버 미실행, 비밀번호 오류 | 로컬 PostgreSQL 실행 상태와 `.env`의 `PG_DSN` 확인 |
