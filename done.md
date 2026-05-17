@@ -4,6 +4,18 @@
 
 ---
 
+## PostgreSQL 단일화 계획 검증 및 수정 (2026-05-18)
+
+### 완료
+
+- `docs/postgres_only_migration_plan.md`의 실행 순서를 보정했다.
+- 테스트 격리와 `integration` 마커 등록을 연결 레이어 변경보다 앞단으로 이동했다.
+- `get_connection()` 반환 타입 조기 변경 금지 원칙을 추가했다.
+- PostgreSQL helper 도입 후 `portfolio/state.py`를 먼저 전환하는 첫 작업 단위를 명확히 했다.
+- 동적 `IN` 쿼리는 `= ANY(%s)` 우선 검토, DuckDB 마이그레이션 스크립트는 별도 예외 판단으로 보강했다.
+
+---
+
 ## 백테스트 결과 (2026-03-27 완료)
 
 | 기간 | CAGR | Sharpe | MDD | Alpha | Beta | Calmar | Turnover |
